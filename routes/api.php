@@ -1,4 +1,5 @@
 <?php
+
 use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\NVT\EmployeesDataController;
@@ -24,6 +25,7 @@ use App\Http\Controllers\Pizza\PizzaCAPController;
 use App\Http\Controllers\PizzaInventory\InventoryWebhookController;
 use App\Http\Controllers\Pizza\ApprovalController;
 
+use App\Http\Controllers\ReimbursementRequestController;
 
 /**************************  NVT  **********************/
 //********** Employees Data Form **************//
@@ -84,7 +86,7 @@ Route::middleware('check.secret')->group(function () {
     Route::get('/deposit-delivery/export-excel', [DepositDeliveryController::class, 'exportToExcel']);
     Route::get('/deposit-delivery/export-excel/{start_date?}/{end_date?}/{franchisee_num?}', [DepositDeliveryController::class, 'exportToExcel']);
 
-    Route::get( 'hiring/export/requests-csv', [HiringRequestExportController::class, 'exportRequests']);
+    Route::get('hiring/export/requests-csv', [HiringRequestExportController::class, 'exportRequests']);
     Route::get('hiring/export/hires-csv', [HiringRequestExportController::class, 'exportHires']);
     Route::get('/pizza-pay/export', [PizzaPayController::class, 'exportCsv']);
 
@@ -98,6 +100,7 @@ Route::middleware('check.secret')->group(function () {
     // Approvals Export
     Route::get('/approvals/export', [ApprovalController::class, 'exportCsv']);
 
+    Route::get('/reimbursement-requests/export', [ReimbursementRequestController::class, 'exportCsv']);
 });
 
 // Json
@@ -110,7 +113,7 @@ Route::middleware('auth.verify')->group(function () {
     Route::get('/pizza/littlecaesars/data', [LittleCaesarsHrDepartmentController::class, 'getData']);
     Route::get('/deposit-delivery/get-data/{start_date?}/{end_date?}/{franchisee_num?}', [DepositDeliveryController::class, 'getData']);
     Route::get('/deposit-delivery/get-data', [DepositDeliveryController::class, 'getData']);
-    
+
     // Approvals Data
     Route::get('/approvals/data', [ApprovalController::class, 'getData']);
 });
@@ -177,3 +180,10 @@ Route::post('/inventory/delete', [InventoryWebhookController::class, 'delete']);
 Route::post('/approvals/create', [ApprovalController::class, 'create']);
 Route::post('/approvals/update', [ApprovalController::class, 'update']);
 Route::post('/approvals/delete', [ApprovalController::class, 'delete']);
+
+
+/**************** Reimbursement Requests ****************/
+
+Route::post('/reimbursement-requests/create', [ReimbursementRequestController::class, 'create']);
+Route::post('/reimbursement-requests/update', [ReimbursementRequestController::class, 'update']);
+Route::post('/reimbursement-requests/delete', [ReimbursementRequestController::class, 'delete']);
