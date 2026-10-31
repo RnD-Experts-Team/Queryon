@@ -10,6 +10,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class WBRController extends Controller
 {
@@ -43,12 +44,7 @@ class WBRController extends Controller
             })
             ->values();
 
-        $moneyOwed = ReimbursementRequest::query()
-            ->whereBetween('expense_date', [
-                $weekStart->toDateString(),
-                $weekEnd->toDateString(),
-            ])
-            ->get()
+        $moneyOwed = $this->moneyOwedBetween($weekStart, $weekEnd)
             ->filter(function (ReimbursementRequest $request) use ($storeNumber) {
                 return $this->storeLabelMatchesStoreNumber($request->store_label, $storeNumber);
             })
@@ -98,12 +94,7 @@ class WBRController extends Controller
             ->whereBetween('submitted_at', [$startDate, $endDate])
             ->get();
 
-        $moneyOwed = ReimbursementRequest::query()
-            ->whereBetween('expense_date', [
-                $startDate->toDateString(),
-                $endDate->toDateString(),
-            ])
-            ->get();
+        $moneyOwed = $this->moneyOwedBetween($startDate, $endDate);
 
         $storeMap = [];
 
@@ -153,6 +144,66 @@ class WBRController extends Controller
             'end_date'   => $endDate->toDateString(),
             'stores'     => array_values($storeMap),
         ]);
+    }
+
+    /**
+     * Expense Date was hidden on the Cognito form, so recent requests only carry
+     * the Week# the store manager typed. Those are matched through the week
+     * instead of the date, which keeps older requests working unchanged.
+     */
+    private function moneyOwedBetween(CarbonImmutable $from, CarbonImmutable $to): Collection
+    {
+        $from = $from->startOfDay();
+        $to = $to->endOfDay();
+
+        return ReimbursementRequest::query()
+            ->where(function ($query) use ($from, $to) {
+                $query->whereBetween('expense_date', [$from->toDateString(), $to->toDateString()])
+                    ->orWhere(function ($withoutDate) use ($from, $to) {
+                        // Bounded so this never grows into a full table scan
+                        $withoutDate->whereNull('expense_date')
+                            ->whereBetween('created_at', [$from->subMonths(2), $to->addMonths(2)]);
+                    });
+            })
+            ->get()
+            ->filter(function (ReimbursementRequest $request) use ($from, $to) {
+                $date = $this->effectiveDate($request);
+
+                return $date !== null && $date->gte($from) && $date->lte($to);
+            })
+            ->values();
+    }
+
+    private function effectiveDate(ReimbursementRequest $request): ?CarbonImmutable
+    {
+        if ($request->expense_date) {
+            return CarbonImmutable::parse($request->expense_date)->startOfDay();
+        }
+
+        if (! $request->week_number || ! $request->created_at) {
+            return null;
+        }
+
+        $submittedAt = CarbonImmutable::parse($request->created_at);
+        $date = $this->weekStartDate($submittedAt->year, (int) $request->week_number);
+
+        // A late week submitted in early January belongs to the previous year
+        if ($date->greaterThan($submittedAt)) {
+            $date = $this->weekStartDate($submittedAt->year - 1, (int) $request->week_number);
+        }
+
+        return $date;
+    }
+
+    /**
+     * First day of an accounting week, matching the Little Caesars calendar:
+     * weeks run Tuesday to Monday and week 1 is the one holding January 1st.
+     */
+    private function weekStartDate(int $year, int $week): CarbonImmutable
+    {
+        return CarbonImmutable::create($year, 1, 1)
+            ->startOfWeek(CarbonInterface::TUESDAY)
+            ->addWeeks($week - 1);
     }
 
     private function isoBusinessWeek(CarbonImmutable $date): array
